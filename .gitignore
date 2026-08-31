@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Packaging / test caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# HybridInfer runtime state (learned risk profile, local config with keys)
+.hybridinfer/
+config.local.yaml
+*.local.yaml
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

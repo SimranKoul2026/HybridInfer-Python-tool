@@ -1,0 +1,38 @@
+# HybridInfer configuration.
+# Runs requests on your local model first and falls back to a remote model when
+# local inference stalls, crashes, or is predicted to fail.
+
+# --- Local tier: your on-device model, served by Ollama (https://ollama.com) ---
+local:
+  backend: ollama
+  model: llama3.2:3b            # any model you've `ollama pull`ed
+  base_url: http://127.0.0.1:11434
+
+# --- Remote tier: any OpenAI-compatible endpoint (OpenAI, OpenRouter, vLLM...) ---
+remote:
+  backend: openai
+  model: gpt-4o-mini
+  base_url: https://api.openai.com/v1
+  api_key_env: OPENAI_API_KEY   # key is read from this environment variable
+
+routing:
+  local_timeout_s: 120          # hard ceiling for a local request
+  local_stall_timeout_s: 20     # no new token for this long => treat local as wedged
+  remote_timeout_s: 120
+  risk_prefer_remote: 0.6       # predicted local-failure prob at/above which we skip local
+  enable_runtime_health_gating: true   # learn per-model risk and pre-empt likely failures
+  enable_in_request_fallback: true     # local fails mid-request => auto-retry on remote
+  enable_recovery: true                # hold a wedged local tier out, then probe it back in
+  force_local: false            # debug: always try local
+  force_remote: false           # debug: always use remote
+
+complexity:
+  short_max_tokens: 128
+  medium_max_tokens: 512
+
+# Where the self-calibrating risk profile is persisted (survives restarts).
+risk_profile_path: ~/.hybridinfer/risk_profile.json
+
+server:
+  host: 127.0.0.1
+  port: 8080

@@ -1,0 +1,82 @@
+{
+  "_doc": "HybridInfer conformance vectors (SPEC.md v1). BYTE-IDENTICAL across the Python and Kotlin implementations. Both test suites load this file and MUST pass every case. To change behavior, edit these vectors first, then both implementations.",
+  "version": 1,
+  "complexity": {
+    "short_max_tokens": 128,
+    "medium_max_tokens": 512,
+    "cases": [
+      { "text": "", "expected_tokens": 0, "expected_bin": 0 },
+      { "text": "hi", "expected_tokens": 1, "expected_bin": 0 },
+      { "repeat": "word ", "times": 100, "expected_tokens": 125, "expected_bin": 0 },
+      { "repeat": "word ", "times": 110, "expected_tokens": 138, "expected_bin": 1 },
+      { "repeat": "word ", "times": 500, "expected_tokens": 625, "expected_bin": 2 },
+      { "repeat": "word ", "times": 4000, "expected_tokens": 5000, "expected_bin": 2 }
+    ]
+  },
+  "risk": {
+    "priors": [0.02, 0.10, 0.55],
+    "prior_weight": 8.0,
+    "tolerance": 1e-9,
+    "cases": [
+      { "bin": 0, "attempts": 0, "failures": 0, "expected_pfail": 0.02 },
+      { "bin": 1, "attempts": 0, "failures": 0, "expected_pfail": 0.10 },
+      { "bin": 2, "attempts": 0, "failures": 0, "expected_pfail": 0.55 },
+      { "bin": 2, "attempts": 20, "failures": 0, "expected_pfail": 0.15714285714285714 },
+      { "bin": 2, "attempts": 10, "failures": 10, "expected_pfail": 0.8 },
+      { "bin": 1, "attempts": 10, "failures": 5, "expected_pfail": 0.32222222222222224 }
+    ]
+  },
+  "state": {
+    "params": { "caution_pfail": 0.5, "unsafe_failures": 2, "recovery_cooldown_s": 60 },
+    "cases": [
+      {
+        "name": "failure_to_unsafe_then_probe_restore",
+        "steps": [
+          { "op": "on_local_failure", "expect_state": "CAUTION" },
+          { "op": "on_local_failure", "expect_state": "UNSAFE" },
+          { "op": "local_allowed", "now": 0, "expect": false, "expect_state": "UNSAFE" },
+          { "op": "local_allowed", "now": 61, "expect": true, "expect_state": "RECOVERING" },
+          { "op": "on_local_success", "expect_state": "RESTORED" },
+          { "op": "on_local_success", "expect_state": "LOCAL_ELIGIBLE" }
+        ]
+      },
+      {
+        "name": "probe_fails_recooldown",
+        "steps": [
+          { "op": "on_local_failure", "expect_state": "CAUTION" },
+          { "op": "on_local_failure", "expect_state": "UNSAFE" },
+          { "op": "local_allowed", "now": 61, "expect": true, "expect_state": "RECOVERING" },
+          { "op": "on_local_failure", "expect_state": "UNSAFE" },
+          { "op": "local_allowed", "now": 100, "expect": false, "expect_state": "UNSAFE" },
+          { "op": "local_allowed", "now": 122, "expect": true, "expect_state": "RECOVERING" }
+        ]
+      },
+      {
+        "name": "on_decision_caution_then_clear",
+        "steps": [
+          { "op": "on_decision", "pfail": 0.6, "expect_state": "CAUTION" },
+          { "op": "on_decision", "pfail": 0.6, "expect_state": "CAUTION" },
+          { "op": "on_local_success", "expect_state": "LOCAL_ELIGIBLE" }
+        ]
+      },
+      {
+        "name": "low_pfail_no_caution",
+        "steps": [
+          { "op": "on_decision", "pfail": 0.3, "expect_state": "LOCAL_ELIGIBLE" }
+        ]
+      }
+    ]
+  },
+  "prefer_local": {
+    "_doc": "local backend='ollama' model='m'; remote backend='openai' model='r'. Seed risk to (attempts,failures) for (local,bin). Config fields unset take defaults (force_local=false, force_remote=false, enable_runtime_health_gating=true, risk_prefer_remote=0.6).",
+    "cases": [
+      { "config": { "enable_runtime_health_gating": true, "risk_prefer_remote": 0.6 }, "risk": { "bin": 2, "attempts": 0, "failures": 0 }, "bin": 2, "expected_prefer_local": true },
+      { "config": { "enable_runtime_health_gating": true, "risk_prefer_remote": 0.5 }, "risk": { "bin": 2, "attempts": 0, "failures": 0 }, "bin": 2, "expected_prefer_local": false },
+      { "config": { "enable_runtime_health_gating": true, "risk_prefer_remote": 0.6 }, "risk": { "bin": 2, "attempts": 10, "failures": 10 }, "bin": 2, "expected_prefer_local": false },
+      { "config": { "enable_runtime_health_gating": true, "risk_prefer_remote": 0.6 }, "risk": { "bin": 0, "attempts": 0, "failures": 0 }, "bin": 0, "expected_prefer_local": true },
+      { "config": { "force_remote": true }, "risk": { "bin": 2, "attempts": 0, "failures": 0 }, "bin": 2, "expected_prefer_local": false },
+      { "config": { "force_local": true, "enable_runtime_health_gating": true, "risk_prefer_remote": 0.5 }, "risk": { "bin": 2, "attempts": 0, "failures": 0 }, "bin": 2, "expected_prefer_local": true },
+      { "config": { "enable_runtime_health_gating": false, "risk_prefer_remote": 0.5 }, "risk": { "bin": 2, "attempts": 0, "failures": 0 }, "bin": 2, "expected_prefer_local": true }
+    ]
+  }
+}
