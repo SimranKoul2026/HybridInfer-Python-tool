@@ -41,8 +41,9 @@ dev = ["pytest>=7"]
 hybridinfer = "hybridinfer.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/SimranKoul2026/HybridInfer"
-Repository = "https://github.com/SimranKoul2026/HybridInfer"
+Homepage = "https://github.com/SimranKoul2026/HybridInfer-Python-tool"
+Repository = "https://github.com/SimranKoul2026/HybridInfer-Python-tool"
+Issues = "https://github.com/SimranKoul2026/HybridInfer-Python-tool/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

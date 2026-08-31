@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+title: "HybridInfer (Python): reliability-aware local-first LLM router"
+message: "If you use this software, please cite it using this metadata."
+type: software
+authors:
+  - given-names: Simran
+    family-names: Koul
+repository-code: "https://github.com/SimranKoul2026/HybridInfer-Python-tool"
+abstract: >-
+  A reliability-aware LLM router that runs each request on a local model
+  (via Ollama) and automatically falls back to a remote OpenAI-compatible
+  model when local inference stalls, crashes, or is predicted to fail.
+  Ships as an OpenAI-compatible server, a CLI, and a Python library.
+keywords:
+  - llm
+  - local-llm
+  - ollama
+  - routing
+  - reliability
+  - fallback
+license: Apache-2.0
+version: 0.1.0
+date-released: "2026-08-31"
