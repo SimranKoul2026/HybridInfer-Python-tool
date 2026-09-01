@@ -7,6 +7,8 @@ crashes, or is *predicted* to fail, it transparently falls back to a **remote**
 model. You keep local-first speed and privacy; you never get left with a wedged
 model and no answer.
 
+![HybridInfer — local-first routing with automatic fallback](assets/demo.gif)
+
 It runs as a local **OpenAI-compatible server**, so any tool that can talk to
 the OpenAI API can point at HybridInfer and get smart routing for free.
 
