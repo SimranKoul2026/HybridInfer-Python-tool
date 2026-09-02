@@ -27,7 +27,7 @@
     ]
   },
   "state": {
-    "params": { "caution_pfail": 0.5, "unsafe_failures": 2, "recovery_cooldown_s": 60 },
+    "params": { "caution_pfail": 0.5, "unsafe_failures": 2, "recovery_cooldown_s": 60, "recovery_backoff": 2.0, "recovery_cooldown_max_s": 600 },
     "cases": [
       {
         "name": "failure_to_unsafe_then_probe_restore",
@@ -41,14 +41,29 @@
         ]
       },
       {
-        "name": "probe_fails_recooldown",
+        "name": "probe_fails_recooldown_backoff",
         "steps": [
           { "op": "on_local_failure", "expect_state": "CAUTION" },
           { "op": "on_local_failure", "expect_state": "UNSAFE" },
           { "op": "local_allowed", "now": 61, "expect": true, "expect_state": "RECOVERING" },
           { "op": "on_local_failure", "expect_state": "UNSAFE" },
           { "op": "local_allowed", "now": 100, "expect": false, "expect_state": "UNSAFE" },
-          { "op": "local_allowed", "now": 122, "expect": true, "expect_state": "RECOVERING" }
+          { "op": "local_allowed", "now": 122, "expect": false, "expect_state": "UNSAFE" },
+          { "op": "local_allowed", "now": 182, "expect": true, "expect_state": "RECOVERING" }
+        ]
+      },
+      {
+        "name": "backoff_escalates_60_120_240",
+        "steps": [
+          { "op": "on_local_failure", "expect_state": "CAUTION" },
+          { "op": "on_local_failure", "expect_state": "UNSAFE" },
+          { "op": "local_allowed", "now": 60, "expect": true, "expect_state": "RECOVERING" },
+          { "op": "on_local_failure", "expect_state": "UNSAFE" },
+          { "op": "local_allowed", "now": 179, "expect": false, "expect_state": "UNSAFE" },
+          { "op": "local_allowed", "now": 180, "expect": true, "expect_state": "RECOVERING" },
+          { "op": "on_local_failure", "expect_state": "UNSAFE" },
+          { "op": "local_allowed", "now": 419, "expect": false, "expect_state": "UNSAFE" },
+          { "op": "local_allowed", "now": 420, "expect": true, "expect_state": "RECOVERING" }
         ]
       },
       {

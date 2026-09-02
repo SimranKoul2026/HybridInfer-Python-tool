@@ -54,7 +54,7 @@ class RuntimeHealthMonitor:
             self._last_ttft = ttft_ms
         if not ok:
             self._failures.append(now)
-            if error in ("timeout", "stall"):
+            if error in ("timeout", "prefill_timeout", "stall"):
                 self._timeouts.append(now)
         self._prune()
 

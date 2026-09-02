@@ -15,8 +15,18 @@ from ..complexity import prompt_tokens
 
 Message = Dict[str, Any]
 
-# error codes the controller treats as a local failure worth falling back on
-FAILURE_ERRORS = {"timeout", "stall", "connection", "oom", "server_error", "empty"}
+# error codes the controller treats as a local failure worth falling back on.
+# prefill_timeout = no first token in time (TTFT timeout); stall = tokens stopped
+# mid-stream (inter-token / decode-rate collapse). They are distinct on purpose.
+FAILURE_ERRORS = {
+    "timeout",
+    "prefill_timeout",
+    "stall",
+    "connection",
+    "oom",
+    "server_error",
+    "empty",
+}
 
 
 class BackendError(Exception):
@@ -43,6 +53,8 @@ class GenerationResult:
     completion_tokens: int = 0
     fell_back: bool = False            # True if a local attempt failed first
     route: List[str] = field(default_factory=list)  # tiers tried, in order
+    reason: str = ""                   # structured routing reason (see controller)
+    idempotency_key: Optional[str] = None  # echoed back if the caller supplied one
 
 
 class Backend(ABC):

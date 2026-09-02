@@ -127,7 +127,38 @@ For each request:
 4. **On any local failure, fall back to remote** in the same request.
 5. **Record the outcome** to update the risk profile and a safety state machine
    (`LOCAL_ELIGIBLE -> CAUTION -> UNSAFE -> RECOVERING -> RESTORED`) that pulls a
-   failing local tier out and probes it back after a cooldown.
+   failing local tier out and probes it back after a cooldown that **grows
+   exponentially** on repeated failures (60s -> 120s -> 240s..., capped).
+
+Every response carries a structured **routing `reason`** in the `hybridinfer`
+metadata (e.g. `local_ok`, `fell_back:stall`, `risk_gate`, `local_held_out`,
+`no_fallback_unsafe:...`), so you can see exactly why a request went where it
+did. Failure classes are distinct too: **`prefill_timeout`** (the first token
+never arrived) vs **`stall`** (tokens stopped mid-stream) vs `oom` /
+`connection` / `server_error`.
+
+## Idempotency (don't duplicate side effects)
+
+By default a chat request is treated as read-only and safe to retry, so fallback
+is free. For **side-effecting / tool-calling** requests a blind retry could
+duplicate an effect, so you can opt out per request:
+
+- **`Idempotency-Key: <key>`** - marks the request safe to retry (the key lets
+  you dedupe downstream); fallback stays enabled.
+- **`X-HybridInfer-Safe-To-Retry: false`** - marks a mutating request; with no
+  idempotency key, HybridInfer **commits to a single tier and will not fall
+  back**, surfacing the failure (`reason: no_fallback_unsafe:...`) instead of
+  replaying it.
+
+(Both can also be set in the request body under a `hybridinfer` object; library
+callers pass `router.complete(..., safe_to_retry=False, idempotency_key="...")`.)
+
+## Not tied to Ollama
+
+Ollama is the convenient default, but any tier can be **any OpenAI-compatible
+server**. Point the **local** tier at a llama.cpp / vLLM / LM Studio server on
+localhost with `backend: openai` and a `base_url`; the **remote** tier can
+likewise be another self-hosted box, not just a cloud API.
 
 ## Configuration
 
@@ -140,6 +171,7 @@ For each request:
 | `routing.risk_prefer_remote` | predicted-failure prob at/above which local is skipped |
 | `routing.enable_in_request_fallback` | auto-retry on remote when local fails |
 | `routing.enable_recovery` | hold out a failing local tier, then probe it back |
+| `routing.recovery_cooldown_s` / `recovery_backoff` / `recovery_cooldown_max_s` | probe cooldown + exponential backoff + cap |
 | `risk_profile_path` | where the learned risk profile is persisted |
 
 The `force_local` / `force_remote` flags and the `enable_*` gates also let you

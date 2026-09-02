@@ -51,6 +51,7 @@ class OllamaBackend(Backend):
         read_to = stall_timeout_s or timeout_s
         timeout = httpx.Timeout(timeout_s, connect=min(10.0, timeout_s), read=read_to)
         start = time.monotonic()
+        emitted = 0
 
         try:
             with httpx.Client(timeout=timeout) as client:
@@ -74,12 +75,15 @@ class OllamaBackend(Backend):
                             raise BackendError(code, err[:200])
                         chunk = (obj.get("message") or {}).get("content", "")
                         if chunk:
+                            emitted += 1
                             yield chunk
                         if obj.get("done"):
                             return
         except httpx.ReadTimeout:
-            # No token for `read_to` seconds: token-rate collapse / wedge.
-            raise BackendError("stall")
+            # No bytes for `read_to` seconds. Distinguish the failure mode:
+            #   0 tokens so far -> the first token never came (prefill/TTFT timeout)
+            #   >=1 token       -> tokens stopped mid-stream (inter-token stall)
+            raise BackendError("prefill_timeout" if emitted == 0 else "stall")
         except httpx.TimeoutException:
             raise BackendError("timeout")
         except httpx.HTTPError:

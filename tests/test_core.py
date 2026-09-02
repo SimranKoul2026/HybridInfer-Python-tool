@@ -189,5 +189,76 @@ class StreamingTests(unittest.TestCase):
         self.assertEqual(remote.calls, 0)                # cannot un-send; no fallback
 
 
+class PrefillFailBackend(Backend):
+    """A local engine whose first token never arrives (TTFT/prefill timeout)."""
+
+    tier, name, model = "local", "ollama", "m"
+
+    def stream(self, messages, *, timeout_s, stall_timeout_s=None):
+        raise BackendError("prefill_timeout")
+        yield ""  # unreachable; makes this a generator function
+
+
+class V2Tests(unittest.TestCase):
+    """v0.2: idempotency contract + structured routing reason + error classes."""
+
+    def _ctrl(self, local_outcomes):
+        local = ScriptedBackend("local", "ollama", "m", local_outcomes)
+        remote = ScriptedBackend("remote", "openai", "r", [True])
+        return FailureAwareController(local, remote, config=ControllerConfig()), local, remote
+
+    def test_reason_local_ok(self):
+        ctrl, _, remote = self._ctrl([True])
+        res = ctrl.complete([{"role": "user", "content": "hi"}])
+        self.assertEqual(res.reason, "local_ok")
+        self.assertEqual(remote.calls, 0)
+
+    def test_reason_fell_back(self):
+        ctrl, _, _ = self._ctrl(["fail"])
+        res = ctrl.complete([{"role": "user", "content": "hi"}])
+        self.assertTrue(res.fell_back)
+        self.assertTrue(res.reason.startswith("fell_back:"))
+
+    def test_idempotency_no_fallback_on_side_effecting(self):
+        # non-idempotent op + no key -> do NOT replay on remote; surface the failure
+        ctrl, _, remote = self._ctrl(["fail"])
+        res = ctrl.complete([{"role": "user", "content": "mutate"}], safe_to_retry=False)
+        self.assertFalse(res.ok)
+        self.assertEqual(res.route, ["local"])
+        self.assertTrue(res.reason.startswith("no_fallback_unsafe:"))
+        self.assertEqual(remote.calls, 0)
+
+    def test_idempotency_key_reenables_fallback(self):
+        ctrl, _, remote = self._ctrl(["fail"])
+        res = ctrl.complete(
+            [{"role": "user", "content": "hi"}], safe_to_retry=False, idempotency_key="k1"
+        )
+        self.assertTrue(res.ok)
+        self.assertEqual(res.tier, "remote")
+        self.assertTrue(res.fell_back)
+        self.assertEqual(res.idempotency_key, "k1")
+        self.assertEqual(remote.calls, 1)
+
+    def test_prefill_timeout_counts_as_failure_and_falls_back(self):
+        remote = ScriptedBackend("remote", "openai", "r", [True])
+        ctrl = FailureAwareController(PrefillFailBackend(), remote, config=ControllerConfig())
+        res = ctrl.complete([{"role": "user", "content": "hi"}])
+        self.assertTrue(res.ok)
+        self.assertEqual(res.tier, "remote")
+        self.assertTrue(res.reason.startswith("fell_back:prefill_timeout"))
+
+    def test_stream_idempotency_no_fallback(self):
+        ctrl, _, remote = self._ctrl(["fail"])  # pre-token local failure
+        deltas, final = [], None
+        for ch in ctrl.stream([{"role": "user", "content": "mutate"}], safe_to_retry=False):
+            if ch.done:
+                final = ch
+            else:
+                deltas.append(ch.delta)
+        self.assertEqual(deltas, [])
+        self.assertTrue(final.meta["reason"].startswith("no_fallback_unsafe"))
+        self.assertEqual(remote.calls, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

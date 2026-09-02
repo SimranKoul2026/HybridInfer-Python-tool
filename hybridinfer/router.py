@@ -10,6 +10,7 @@ from .complexity import ComplexityThresholds
 from .config import Settings
 from .controller import ControllerConfig, FailureAwareController, StreamChunk
 from .reliability.risk import RiskProfile
+from .reliability.state import SafetyStateMachine
 
 
 class HybridRouter:
@@ -36,17 +37,38 @@ class HybridRouter:
                 force_remote=settings.force_remote,
             ),
             risk=RiskProfile(risk_path),
+            state=SafetyStateMachine(
+                recovery_cooldown_s=settings.recovery_cooldown_s,
+                recovery_backoff=settings.recovery_backoff,
+                recovery_cooldown_max_s=settings.recovery_cooldown_max_s,
+            ),
             thresholds=ComplexityThresholds(
                 short_max_tokens=settings.short_max_tokens,
                 medium_max_tokens=settings.medium_max_tokens,
             ),
         )
 
-    def complete(self, messages: List[Message]) -> GenerationResult:
-        return self.controller.complete(messages)
+    def complete(
+        self,
+        messages: List[Message],
+        *,
+        idempotency_key: Optional[str] = None,
+        safe_to_retry: bool = True,
+    ) -> GenerationResult:
+        return self.controller.complete(
+            messages, idempotency_key=idempotency_key, safe_to_retry=safe_to_retry
+        )
 
-    def stream(self, messages: List[Message]) -> Iterator[StreamChunk]:
-        return self.controller.stream(messages)
+    def stream(
+        self,
+        messages: List[Message],
+        *,
+        idempotency_key: Optional[str] = None,
+        safe_to_retry: bool = True,
+    ) -> Iterator[StreamChunk]:
+        return self.controller.stream(
+            messages, idempotency_key=idempotency_key, safe_to_retry=safe_to_retry
+        )
 
     def models(self) -> List[str]:
         out = []

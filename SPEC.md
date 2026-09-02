@@ -87,7 +87,7 @@ store MUST NOT crash the router; start empty.
 
 States: `LOCAL_ELIGIBLE`, `CAUTION`, `UNSAFE`, `RECOVERING`, `RESTORED`.
 Parameters (defaults): `caution_pfail = 0.5`, `unsafe_failures = 2`,
-`recovery_cooldown_s = 60`.
+`recovery_cooldown_s = 60`, `recovery_backoff = 2.0`, `recovery_cooldown_max_s = 600`.
 
 ```
 on_decision(pfail):                      # soft, pre-request gating
@@ -96,22 +96,23 @@ on_decision(pfail):                      # soft, pre-request gating
 
 local_allowed() -> bool:
     if state in {LOCAL_ELIGIBLE, CAUTION, RESTORED}: return true
-    # UNSAFE / RECOVERING: allow ONE probe once cooldown elapses
-    if unsafe_since != null and (now - unsafe_since) >= recovery_cooldown_s:
+    # UNSAFE / RECOVERING: allow ONE probe once the (backed-off) cooldown elapses
+    cooldown = min(recovery_cooldown_s * recovery_backoff^probe_failures, recovery_cooldown_max_s)
+    if unsafe_since != null and (now - unsafe_since) >= cooldown:
         state = RECOVERING
         return true
     return false
 
 on_local_success():
     consec_fail = 0
-    if state == RECOVERING:            state = RESTORED; unsafe_since = null
+    if state == RECOVERING:            state = RESTORED; unsafe_since = null; probe_failures = 0
     elif state in {CAUTION, RESTORED}: state = LOCAL_ELIGIBLE
 
 on_local_failure():
     consec_fail += 1
-    if state == RECOVERING:            state = UNSAFE; unsafe_since = now   # probe failed
-    elif consec_fail >= unsafe_failures: state = UNSAFE; unsafe_since = now
-    else:                              state = CAUTION
+    if state == RECOVERING:              probe_failures += 1; state = UNSAFE; unsafe_since = now  # probe failed -> grow cooldown
+    elif consec_fail >= unsafe_failures: probe_failures = 0;  state = UNSAFE; unsafe_since = now  # new episode -> base cooldown
+    else:                                state = CAUTION
 ```
 
 `now` comes from an injectable monotonic clock (for testability).
@@ -121,7 +122,8 @@ on_local_failure():
 ## 5. Runtime-health monitor
 
 Rolling counters over a window (default 300 s): recent failures, recent timeouts
-(error in {timeout, stall}), last latency, last TTFT, consecutive-local count.
+(error in {timeout, prefill_timeout, stall}), last latency, last TTFT,
+consecutive-local count.
 Informational for hosts/telemetry; the routing gate is driven by the risk profile
 and state machine above. (Android MAY additionally fold in thermal headroom;
 desktop has no portable thermal signal - see 9.)
@@ -168,8 +170,23 @@ A token, once sent, cannot be un-sent, so:
   model into a partial response).
 
 ### Failure codes
-`timeout`, `stall` (token-rate collapse), `connection`, `oom`, `server_error`,
-`empty`, or `http_<code>`.
+`prefill_timeout` (no first token / TTFT timeout), `stall` (inter-token / decode
+collapse), `timeout` (overall), `connection`, `oom`, `server_error`, `empty`, or
+`http_<code>`.
+
+### Idempotency
+Requests are read-only / safe-to-retry by default (fallback enabled). A caller
+may mark a side-effecting request as not safe to retry; with no idempotency key
+supplied, the controller commits to a single tier and does NOT fall back after a
+local failure (surfacing it instead), so a mutating op is never replayed.
+Supplying an idempotency key re-enables fallback. Transport: `Idempotency-Key`
+and `X-HybridInfer-Safe-To-Retry` request headers (or a body `hybridinfer`
+object; library callers pass `safe_to_retry` / `idempotency_key`).
+
+### Routing reason
+Every result carries a structured `reason` (e.g. `local_ok`, `fell_back:<code>`,
+`risk_gate`, `local_held_out`, `no_fallback_unsafe:<code>`, `local_only`) exposed
+in the response's `hybridinfer` metadata.
 
 ---
 
@@ -180,7 +197,9 @@ local  / remote : { backend, model, base_url, api_key(_env) }
 routing:
   local_timeout_s, local_stall_timeout_s, remote_timeout_s,
   risk_prefer_remote, enable_runtime_health_gating,
-  enable_in_request_fallback, enable_recovery, force_local, force_remote
+  enable_in_request_fallback, enable_recovery,
+  recovery_cooldown_s, recovery_backoff, recovery_cooldown_max_s,
+  force_local, force_remote
 complexity: short_max_tokens, medium_max_tokens
 risk_profile_path
 ```

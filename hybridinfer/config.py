@@ -42,6 +42,11 @@ class Settings:
     force_local: bool = False
     force_remote: bool = False
 
+    # recovery probe backoff (safety state machine)
+    recovery_cooldown_s: float = 60.0
+    recovery_backoff: float = 2.0
+    recovery_cooldown_max_s: float = 600.0
+
     # complexity bins
     short_max_tokens: int = 128
     medium_max_tokens: int = 512
@@ -82,6 +87,9 @@ def settings_from_dict(data: Dict[str, Any]) -> Settings:
         enable_recovery=bool(routing.get("enable_recovery", True)),
         force_local=bool(routing.get("force_local", False)),
         force_remote=bool(routing.get("force_remote", False)),
+        recovery_cooldown_s=float(routing.get("recovery_cooldown_s", 60.0)),
+        recovery_backoff=float(routing.get("recovery_backoff", 2.0)),
+        recovery_cooldown_max_s=float(routing.get("recovery_cooldown_max_s", 600.0)),
         short_max_tokens=int(complexity.get("short_max_tokens", 128)),
         medium_max_tokens=int(complexity.get("medium_max_tokens", 512)),
         risk_profile_path=data.get("risk_profile_path"),
@@ -108,13 +116,21 @@ DEFAULT_CONFIG_YAML = """\
 # Runs requests on your local model first and falls back to a remote model when
 # local inference stalls, crashes, or is predicted to fail.
 
-# --- Local tier: your on-device model, served by Ollama (https://ollama.com) ---
+# --- Local tier ---
+# Ollama is the easy default, but the local tier can be ANY OpenAI-compatible
+# server too - point `backend: openai` at a llama.cpp / vLLM / LM Studio server on
+# localhost if you'd rather not use Ollama (see the commented example below).
 local:
   backend: ollama
   model: llama3.2:3b            # any model you've `ollama pull`ed
   base_url: http://127.0.0.1:11434
+# local:                       # <- llama.cpp / vLLM instead of Ollama:
+#   backend: openai
+#   model: your-local-model
+#   base_url: http://127.0.0.1:8000/v1
 
-# --- Remote tier: any OpenAI-compatible endpoint (OpenAI, OpenRouter, vLLM...) ---
+# --- Remote/fallback tier: any OpenAI-compatible endpoint ---
+# Cloud (OpenAI, OpenRouter) OR another self-hosted box (a bigger vLLM server).
 remote:
   backend: openai
   model: gpt-4o-mini
@@ -129,6 +145,9 @@ routing:
   enable_runtime_health_gating: true   # learn per-model risk and pre-empt likely failures
   enable_in_request_fallback: true     # local fails mid-request => auto-retry on remote
   enable_recovery: true                # hold a wedged local tier out, then probe it back in
+  recovery_cooldown_s: 60       # base wait before probing a wedged local tier
+  recovery_backoff: 2.0         # cooldown grows x this per failed probe (exponential backoff)
+  recovery_cooldown_max_s: 600  # cap on the backed-off cooldown
   force_local: false            # debug: always try local
   force_remote: false           # debug: always use remote
 

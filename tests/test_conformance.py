@@ -72,6 +72,8 @@ class ConformanceTests(unittest.TestCase):
                 caution_pfail=p["caution_pfail"],
                 unsafe_failures=p["unsafe_failures"],
                 recovery_cooldown_s=p["recovery_cooldown_s"],
+                recovery_backoff=p["recovery_backoff"],
+                recovery_cooldown_max_s=p["recovery_cooldown_max_s"],
                 clock=lambda: clock["t"],
             )
             for step in case["steps"]:
