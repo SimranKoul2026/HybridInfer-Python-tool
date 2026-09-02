@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from .backends.base import Backend, BackendError, GenerationResult, Message
 from .complexity import ComplexityThresholds, complexity_bin
@@ -94,6 +94,7 @@ class FailureAwareController:
         *,
         idempotency_key: Optional[str] = None,
         safe_to_retry: bool = True,
+        params: Optional[Dict[str, Any]] = None,
     ) -> GenerationResult:
         bin_ = complexity_bin(messages, self.thresholds)
         route: List[str] = []
@@ -107,6 +108,7 @@ class FailureAwareController:
                     messages,
                     timeout_s=self.cfg.local_timeout_s,
                     stall_timeout_s=self.cfg.local_stall_timeout_s,
+                    params=params,
                 )
                 route.append("local")
                 self.health.record_result(res.ok, res.error, res.latency_ms, res.ttft_ms)
@@ -130,7 +132,7 @@ class FailureAwareController:
 
         # remote tier (either preferred up front, or the fallback after a local failure)
         if self.remote is not None:
-            res = self.remote.generate(messages, timeout_s=self.cfg.remote_timeout_s)
+            res = self.remote.generate(messages, timeout_s=self.cfg.remote_timeout_s, params=params)
             route.append("remote")
             self.health.record_result(res.ok, res.error, res.latency_ms, res.ttft_ms)
             res.fell_back = "local" in route
@@ -143,6 +145,7 @@ class FailureAwareController:
                 messages,
                 timeout_s=self.cfg.local_timeout_s,
                 stall_timeout_s=self.cfg.local_stall_timeout_s,
+                params=params,
             )
             route.append("local")
             self.risk.update(self.local.name, self.local.model, bin_, failed=not res.ok)
@@ -177,6 +180,7 @@ class FailureAwareController:
         *,
         idempotency_key: Optional[str] = None,
         safe_to_retry: bool = True,
+        params: Optional[Dict[str, Any]] = None,
     ) -> Iterator[StreamChunk]:
         """Streaming variant with first-token-commit fallback semantics.
 
@@ -204,6 +208,7 @@ class FailureAwareController:
                     messages,
                     timeout_s=self.cfg.local_timeout_s,
                     stall_timeout_s=self.cfg.local_stall_timeout_s,
+                    params=params,
                 ):
                     emitted += 1
                     yield StreamChunk(delta=delta, tier="local", model=self.local.model)
@@ -246,7 +251,7 @@ class FailureAwareController:
             n = 0
             err: Optional[str] = None
             try:
-                for delta in self.remote.stream(messages, timeout_s=self.cfg.remote_timeout_s):
+                for delta in self.remote.stream(messages, timeout_s=self.cfg.remote_timeout_s, params=params):
                     n += 1
                     yield StreamChunk(delta=delta, tier="remote", model=self.remote.model)
             except BackendError as e:
@@ -266,6 +271,7 @@ class FailureAwareController:
                     messages,
                     timeout_s=self.cfg.local_timeout_s,
                     stall_timeout_s=self.cfg.local_stall_timeout_s,
+                    params=params,
                 ):
                     n += 1
                     yield StreamChunk(delta=delta, tier="local", model=self.local.model)

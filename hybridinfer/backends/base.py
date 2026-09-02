@@ -72,8 +72,13 @@ class Backend(ABC):
         *,
         timeout_s: float,
         stall_timeout_s: Optional[float] = None,
+        params: Optional[Dict[str, Any]] = None,
     ) -> Iterator[str]:
-        """Yield text deltas as they arrive. Raise BackendError on failure."""
+        """Yield text deltas as they arrive. Raise BackendError on failure.
+
+        `params` are the caller's OpenAI-style generation parameters (temperature,
+        max_tokens, tools, ...) to forward to the backend; the backend must not let
+        them override its own model/messages/stream."""
         ...
 
     def available(self) -> bool:
@@ -86,6 +91,7 @@ class Backend(ABC):
         *,
         timeout_s: float,
         stall_timeout_s: Optional[float] = None,
+        params: Optional[Dict[str, Any]] = None,
         on_token: Optional[Callable[[str, int], None]] = None,
     ) -> GenerationResult:
         """Non-streaming convenience: consume stream() into one result."""
@@ -95,7 +101,7 @@ class Backend(ABC):
         n = 0
         try:
             for delta in self.stream(
-                messages, timeout_s=timeout_s, stall_timeout_s=stall_timeout_s
+                messages, timeout_s=timeout_s, stall_timeout_s=stall_timeout_s, params=params
             ):
                 now = time.monotonic()
                 if ttft is None:

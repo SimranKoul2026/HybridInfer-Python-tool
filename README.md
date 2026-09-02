@@ -160,6 +160,17 @@ server**. Point the **local** tier at a llama.cpp / vLLM / LM Studio server on
 localhost with `backend: openai` and a `base_url`; the **remote** tier can
 likewise be another self-hosted box, not just a cloud API.
 
+## Parameter passthrough
+
+Generation parameters you send (`temperature`, `top_p`, `max_tokens`, `stop`,
+`tools`, `tool_choice`, `response_format`, `seed`, ...) are **forwarded to the
+backend**. HybridInfer only manages `messages`, `model` (the routed tier picks
+it), and `stream`. OpenAI-compatible backends receive them verbatim (and future
+params work automatically); the native Ollama backend maps the common sampling
+params to its `options` (`max_tokens` -> `num_predict`) and passes `tools` / a
+JSON `response_format` through - for full fidelity, point the local tier at
+Ollama's own OpenAI-compatible `/v1` endpoint.
+
 ## Configuration
 
 `hybridinfer init` writes an annotated `config.yaml`. Key knobs:

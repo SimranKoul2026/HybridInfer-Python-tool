@@ -9,7 +9,7 @@ runtime-health controller from the HybridInfer research system.
 """
 from __future__ import annotations
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 # Core (stdlib-only) surface. Heavier pieces (backends/router/server) pull in
 # httpx/fastapi and are imported from their own modules on demand.

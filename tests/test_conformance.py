@@ -34,7 +34,7 @@ class _DummyBackend:
     def __init__(self, tier, name, model):
         self.tier, self.name, self.model = tier, name, model
 
-    def stream(self, messages, *, timeout_s, stall_timeout_s=None):  # pragma: no cover
+    def stream(self, messages, *, timeout_s, stall_timeout_s=None, params=None):  # pragma: no cover
         return iter(())
 
 

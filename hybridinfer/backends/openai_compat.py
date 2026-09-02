@@ -6,7 +6,7 @@ that speaks POST {base_url}/chat/completions with `stream: true` (SSE).
 from __future__ import annotations
 
 import json
-from typing import Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from .base import Backend, BackendError, Message
 
@@ -32,6 +32,7 @@ class OpenAICompatBackend(Backend):
         *,
         timeout_s: float,
         stall_timeout_s: Optional[float] = None,
+        params: Optional[Dict[str, Any]] = None,
     ) -> Iterator[str]:
         import httpx
 
@@ -39,7 +40,8 @@ class OpenAICompatBackend(Backend):
         headers = {}
         if self.api_key:
             headers["Authorization"] = "Bearer " + self.api_key
-        payload = {"model": self.model, "messages": messages, "stream": True}
+        # Forward the caller's generation params; the routed model/messages/stream win.
+        payload = {**(params or {}), "model": self.model, "messages": messages, "stream": True}
 
         try:
             with httpx.Client(timeout=timeout_s) as client:

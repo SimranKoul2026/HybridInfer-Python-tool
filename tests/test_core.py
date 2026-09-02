@@ -43,7 +43,7 @@ class ScriptedBackend(Backend):
         self._outcomes = list(outcomes)
         self.calls = 0
 
-    def stream(self, messages, *, timeout_s, stall_timeout_s=None):
+    def stream(self, messages, *, timeout_s, stall_timeout_s=None, params=None):
         outcome = self._outcomes[self.calls] if self.calls < len(self._outcomes) else True
         self.calls += 1
         if outcome == "fail":
@@ -194,7 +194,7 @@ class PrefillFailBackend(Backend):
 
     tier, name, model = "local", "ollama", "m"
 
-    def stream(self, messages, *, timeout_s, stall_timeout_s=None):
+    def stream(self, messages, *, timeout_s, stall_timeout_s=None, params=None):
         raise BackendError("prefill_timeout")
         yield ""  # unreachable; makes this a generator function
 
@@ -246,6 +246,27 @@ class V2Tests(unittest.TestCase):
         self.assertTrue(res.ok)
         self.assertEqual(res.tier, "remote")
         self.assertTrue(res.reason.startswith("fell_back:prefill_timeout"))
+
+    def test_params_forwarded_to_backend(self):
+        captured = {}
+
+        class Capture(Backend):
+            tier, name, model = "local", "ollama", "m"
+
+            def stream(self, messages, *, timeout_s, stall_timeout_s=None, params=None):
+                captured["params"] = params
+                yield "ok"
+
+        remote = ScriptedBackend("remote", "openai", "r", [True])
+        ctrl = FailureAwareController(Capture(), remote, config=ControllerConfig())
+        ctrl.complete(
+            [{"role": "user", "content": "hi"}],
+            params={"temperature": 0.2, "max_tokens": 64, "tools": [{"type": "function"}]},
+        )
+        self.assertEqual(
+            captured["params"],
+            {"temperature": 0.2, "max_tokens": 64, "tools": [{"type": "function"}]},
+        )
 
     def test_stream_idempotency_no_fallback(self):
         ctrl, _, remote = self._ctrl(["fail"])  # pre-token local failure

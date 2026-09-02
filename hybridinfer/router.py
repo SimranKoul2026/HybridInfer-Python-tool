@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from typing import Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from .backends import build_backend
 from .backends.base import GenerationResult, Message
@@ -54,9 +54,10 @@ class HybridRouter:
         *,
         idempotency_key: Optional[str] = None,
         safe_to_retry: bool = True,
+        params: Optional[Dict[str, Any]] = None,
     ) -> GenerationResult:
         return self.controller.complete(
-            messages, idempotency_key=idempotency_key, safe_to_retry=safe_to_retry
+            messages, idempotency_key=idempotency_key, safe_to_retry=safe_to_retry, params=params
         )
 
     def stream(
@@ -65,9 +66,10 @@ class HybridRouter:
         *,
         idempotency_key: Optional[str] = None,
         safe_to_retry: bool = True,
+        params: Optional[Dict[str, Any]] = None,
     ) -> Iterator[StreamChunk]:
         return self.controller.stream(
-            messages, idempotency_key=idempotency_key, safe_to_retry=safe_to_retry
+            messages, idempotency_key=idempotency_key, safe_to_retry=safe_to_retry, params=params
         )
 
     def models(self) -> List[str]:

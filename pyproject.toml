@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hybridinfer"
-version = "0.2.0"
+version = "0.2.1"
 description = "Reliability-aware LLM router: run requests on your local model and automatically fall back to a remote model when local inference stalls or crashes."
 readme = "README.md"
 requires-python = ">=3.9"

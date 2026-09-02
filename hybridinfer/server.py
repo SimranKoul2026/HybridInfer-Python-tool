@@ -19,6 +19,15 @@ from .config import Settings
 from .router import HybridRouter
 
 
+# request-body keys HybridInfer manages itself; everything else is forwarded to the backend.
+_RESERVED_BODY_KEYS = {"messages", "model", "stream", "hybridinfer"}
+
+
+def _passthrough_params(body: Dict[str, Any]) -> Dict[str, Any]:
+    """OpenAI generation params to forward (temperature, max_tokens, tools, ...)."""
+    return {k: v for k, v in body.items() if k not in _RESERVED_BODY_KEYS}
+
+
 def _resolve_idempotency(
     key_hdr: Optional[str], safe_hdr: Optional[str], body: Dict[str, Any]
 ) -> Tuple[Optional[str], bool]:
@@ -50,7 +59,7 @@ def _sse_chunk(cid: str, created: int, model: str, delta: Dict[str, Any], finish
 
 def _event_stream(
     router: HybridRouter, messages: List[Dict[str, Any]],
-    idempotency_key: Optional[str], safe_to_retry: bool,
+    idempotency_key: Optional[str], safe_to_retry: bool, params: Dict[str, Any],
 ) -> Iterator[str]:
     """Format the controller's StreamChunks as OpenAI-style SSE."""
     created = int(time.time())
@@ -58,7 +67,8 @@ def _event_stream(
     model = "hybridinfer"
     role_sent = False
     meta: Dict[str, Any] = {}
-    for ch in router.stream(messages, idempotency_key=idempotency_key, safe_to_retry=safe_to_retry):
+    for ch in router.stream(messages, idempotency_key=idempotency_key,
+                            safe_to_retry=safe_to_retry, params=params):
         if ch.done:
             meta = ch.meta or {}
             if ch.error:
@@ -82,7 +92,7 @@ def create_app(settings: Settings):
     from fastapi import FastAPI, Header
     from fastapi.responses import JSONResponse, StreamingResponse
 
-    app = FastAPI(title="HybridInfer", version="0.2.0")
+    app = FastAPI(title="HybridInfer", version="0.2.1")
     router = HybridRouter(settings)
 
     @app.get("/healthz")
@@ -117,12 +127,13 @@ def create_app(settings: Settings):
             )
 
         idem_key, safe_to_retry = _resolve_idempotency(idempotency_key, safe_to_retry_hdr, body)
+        params = _passthrough_params(body)
 
         # Streaming: return SSE. Starlette iterates the sync generator in a
         # threadpool, so the blocking backend HTTP stays off the event loop.
         if body.get("stream"):
             return StreamingResponse(
-                _event_stream(router, messages, idem_key, safe_to_retry),
+                _event_stream(router, messages, idem_key, safe_to_retry, params),
                 media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
@@ -131,7 +142,8 @@ def create_app(settings: Settings):
         import anyio
 
         res = await anyio.to_thread.run_sync(
-            lambda: router.complete(messages, idempotency_key=idem_key, safe_to_retry=safe_to_retry)
+            lambda: router.complete(messages, idempotency_key=idem_key,
+                                    safe_to_retry=safe_to_retry, params=params)
         )
 
         if not res.ok:

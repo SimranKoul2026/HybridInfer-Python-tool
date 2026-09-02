@@ -10,9 +10,41 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from .base import Backend, BackendError, Message
+
+# OpenAI generation params that map into Ollama's native `options` object.
+_OLLAMA_OPTION_KEYS = {
+    "temperature", "top_p", "top_k", "seed", "stop",
+    "presence_penalty", "frequency_penalty", "repeat_penalty", "min_p", "num_ctx",
+}
+
+
+def _ollama_extra(params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Map OpenAI-style params onto Ollama's native /api/chat shape.
+
+    Sampling params go in `options` (`max_tokens` -> `num_predict`); `tools` and a
+    JSON `response_format` map to top-level fields. Unmappable params are dropped on
+    the native API (use Ollama's OpenAI-compatible /v1 endpoint for full fidelity).
+    """
+    if not params:
+        return {}
+    extra: Dict[str, Any] = {}
+    options: Dict[str, Any] = {}
+    for k, v in params.items():
+        if k in ("max_tokens", "max_completion_tokens"):
+            options["num_predict"] = v
+        elif k in _OLLAMA_OPTION_KEYS:
+            options[k] = v
+        elif k == "tools":
+            extra["tools"] = v
+        elif k == "response_format":
+            if isinstance(v, dict) and v.get("type") in ("json_object", "json_schema"):
+                extra["format"] = "json"
+    if options:
+        extra["options"] = options
+    return extra
 
 
 class OllamaBackend(Backend):
@@ -43,11 +75,12 @@ class OllamaBackend(Backend):
         *,
         timeout_s: float,
         stall_timeout_s: Optional[float] = None,
+        params: Optional[Dict[str, Any]] = None,
     ) -> Iterator[str]:
         import httpx
 
         url = self.base_url + "/api/chat"
-        payload = {"model": self.model, "messages": messages, "stream": True}
+        payload = {"model": self.model, "messages": messages, "stream": True, **_ollama_extra(params)}
         read_to = stall_timeout_s or timeout_s
         timeout = httpx.Timeout(timeout_s, connect=min(10.0, timeout_s), read=read_to)
         start = time.monotonic()
